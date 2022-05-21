@@ -11,7 +11,7 @@ export class Mon {
     @Column()
     type_1: string;
 
-    @Column()
+    @Column({ nullable: true })
     type_2: string;
 
     @Column()
