@@ -15,4 +15,16 @@ export class MonService {
         return this.manager.save(mon); // returns a promise for the quiz as it was saved in the database
         // not returning user after saving because the promise includes the automatically generated id (by the orm)
     }
+
+    async getAll() : Promise<Mon[]> {
+        return this.manager.find(Mon); // does not need await, returns promise
+    }
+
+    async getOne(id: string) : Promise<Mon> {
+        // the additional relations option joins tables and returns the correpsonding answers too
+        const result = await this.manager.findOne(Mon, id);
+        if(!result) throw new NotFoundException(`Mon ${id} not found`);
+        return result;
+    }
+
 }
