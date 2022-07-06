@@ -102,7 +102,15 @@ export class AppService {
 
         Object.keys(evObj).forEach((key, i) => evObj[key] = evArr[i]);
 
-        return {mons: monArr, evs: evObj, natures: natureObj, unresisted_pairs: await this.getUnresistedPairs(monArr.map(({mon: {types}}) => types))};
+        let monTypes: string[][] = monArr.map(({mon: {types}}) => types);
+
+        return {
+            mons: monArr,
+            evs: evObj,
+            natures: natureObj,
+            unresisted_pairs: await this.getImportantPairs(monTypes),
+            weak_pairs: await this.getImportantPairs(monTypes, "weak")
+        };
     }
 
     // TODO proper return type, perhaps with an interface
@@ -139,7 +147,8 @@ export class AppService {
     }
 
     // TODO IMPORTANT https://stackoverflow.com/a/7400933
-    async getUnresistedPairs(types: string[][]): Promise<string[][]> {
+    // TODO exception for interaction
+    async getImportantPairs(types: string[][], interaction: string = "unresisted"): Promise<string[][]> {
         // http://tau-prolog.org/manual/promises-interface
         const pl = require("tau-prolog");
         const fs = require('fs');
@@ -157,7 +166,7 @@ export class AppService {
         let res = [];
 
         const program = fs.readFileSync('./predicatesxy.pl', 'utf8');
-        const goal = `unresisted_pair(X, Y).`;
+        const goal = `${interaction}_pair(X, Y).`;
         const session = pl.create();
         await session.promiseConsult(program);
         await session.promiseConsult(additionalPredicates);

@@ -34,6 +34,7 @@ type(water).
 
 /* Complicated rules */
 /* unresisted_pair(X, Y): there doesn't exist a team member with types W, Z such that W, Z resists both X and Y */
+/* weak_pair(X, Y): all team members are weak to X or Y */
 /* pair refers to two types. The implementation interprets dual types of the same type properly (it works when W = Z) */
 
 /* unresisted_two(X, Y) :- \+ (team_member(W, Z), (resist_two(W, Z, X) ; resist_two(W, Z, Y) ; resist_four(W, Z, X) ; resist_four(W, Z, Y) ; immune(W, Z, X) ; immune(W, Z, Y))). */
@@ -41,6 +42,9 @@ type(water).
 /* @< this operator instead of inequality (\=) to ignore symmetrical solutions */
 unresisted_single(X) :- type(X), forall(team_member(W, Z), (\+ resist_two(W, Z, X), \+ resist_four(W, Z, X), \+ immune(W, Z, X))).
 unresisted_pair(X, Y) :- type(X), type(Y), X @< Y, forall(team_member(W, Z), (\+ resist_two(W, Z, X), \+ resist_four(W, Z, X), \+ immune(W, Z, X) ; (\+ resist_two(W, Z, Y), \+ resist_four(W, Z, Y), \+ immune(W, Z, Y)))).
+
+weak_single(X) :- type(X), forall(team_member(W, Z), (weak_two(W, Z, X) ; weak_four(W, Z, X))).
+weak_pair(X, Y) :- type(X), type(Y), X @< Y, forall(team_member(W, Z), (weak_two(W, Z, X) ; weak_four(W, Z, X) ; weak_two(W, Z, Y) ; weak_four(W, Z, Y))).
 
 /* Predicates for each type alphabetically, as per convention */
 
