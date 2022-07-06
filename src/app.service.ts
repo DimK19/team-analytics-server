@@ -7,22 +7,22 @@ import { AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
 
 /* TODO
- * getNatures
- * getEvs
- * getTypes
- * all in different functions
+ * validate input (yes I am parsing it in the frontend,
+ * but it should be checked here)
  */
 
 @Injectable()
 export class AppService {
     constructor(private httpService: HttpService, @InjectEntityManager() private manager: EntityManager) {}
 
+    private offNatures: string[] = ["lonely", "adamant", "naughty", "brave", "modest", "mild", "rash", "quiet"];
+    private defNatures: string[] = ["bold", "impish", "relaxed", "lax", "calm", "gentle", "careful", "sassy"];
+    private speNatures: string[] = ["timid", "hasty", "jolly", "naive"];
+    private minusSpeNatures: string[] = ["brave", "relaxed", "quiet", "sassy"];
+
     // http://tau-prolog.org/manual/compatibility-with-nodejs
     async getStats(team): Promise<any> { // TODO void for now, will return object
         // extrapolate ev statistics
-        let offNatures = ["lonely", "adamant", "naughty", "brave", "modest", "mild", "rash", "quiet"];
-        let defNatures = ["bold", "impish", "relaxed", "lax", "calm", "gentle", "careful", "sassy"];
-        let speNatures = ["timid", "hasty", "jolly", "naive"];
 
         let evObj = {
             "hp": 0,
@@ -40,12 +40,16 @@ export class AppService {
         };
 
         var monArr = [];
-        var types = [];
-        var speed = 0;
+        var types: string[] = [];
+        var speed: number = 0;
+        var speedFlag: number = 0;
+        var speeds: number[] = [];
 
         for(let member of team['members']) {
             const nameInDB = member.name.replaceAll(/\W/g, ''); // remove dashes and apostrophes
             const mon = await this.manager.findOne(Mon, {name: nameInDB});
+
+            speedFlag = 0;
 
             if(!mon) {
                 let response = await firstValueFrom(this.httpService.get(`https://pokeapi.co/api/v2/pokemon/${member.name}`)); // name with punctuation needed here
@@ -71,14 +75,7 @@ export class AppService {
                 types = [mon.type_1, mon.type_2].filter(x => x); // removing null is that easy
                 speed = mon.speed;
             }
-            /*
-            monObj = Object.assign({
-                [nameInDB]: {
-                    types: types,
-                    speed: speed
-                },
-            }, monObj);
-            */
+
             monArr.push({
                 mon: {
                     name: nameInDB,
@@ -89,11 +86,14 @@ export class AppService {
 
             for(let i of member["evs"]) {
                 evObj[i.ev.stat] += i.ev.value;
+                if(i.ev.stat === "spe") speedFlag = i.ev.value;
             }
-            if(offNatures.includes(member["nature"])) natureObj.offense += 1;
-            else if(defNatures.includes(member["nature"])) natureObj.defense += 1;
-            else if(speNatures.includes(member["nature"])) natureObj.speed += 1;
+            if(this.offNatures.includes(member["nature"])) natureObj.offense += 1;
+            else if(this.defNatures.includes(member["nature"])) natureObj.defense += 1;
+            else if(this.speNatures.includes(member["nature"])) natureObj.speed += 1;
             // there must be a more clever way of doing this
+
+            speeds.push(this.calculateSpeed(speed, member["nature"], speedFlag));
         }
 
         // const sumObjectValues = obj => Object.values(obj).reduce((x, y) => x + y);
@@ -103,13 +103,16 @@ export class AppService {
         Object.keys(evObj).forEach((key, i) => evObj[key] = evArr[i]);
 
         let monTypes: string[][] = monArr.map(({mon: {types}}) => types);
+        // TODO console.log(typeof(monArr)); -> Object, not Object[], why?
 
         return {
             mons: monArr,
             evs: evObj,
             natures: natureObj,
             unresisted_pairs: await this.getImportantPairs(monTypes),
-            weak_pairs: await this.getImportantPairs(monTypes, "weak")
+            weak_pairs: await this.getImportantPairs(monTypes, "weak"),
+            highest_speed: Math.max(...speeds),
+            lowest_speed: Math.min(...speeds)
         };
     }
 
@@ -178,5 +181,13 @@ export class AppService {
         }
 
         return res.map(this.parsePrologAnswers);
+    }
+
+    // TODO account for IV
+    calculateSpeed(stat, nature, ev): number {
+        let factor = 1;
+        if(this.speNatures.includes(nature)) factor = 1.1;
+        else if(this.minusSpeNatures.includes(nature)) factor = 0.9;
+        return Math.floor(((stat + 20) + Math.ceil(ev / 8)) * factor);
     }
 }
