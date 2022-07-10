@@ -11,6 +11,11 @@ import { firstValueFrom } from 'rxjs';
  * but it should be checked here)
  */
 
+export interface Interaction {
+    name: string,
+    interactions: Object
+}
+
 @Injectable()
 export class AppService {
     constructor(private httpService: HttpService, @InjectEntityManager() private manager: EntityManager) {}
@@ -39,6 +44,7 @@ export class AppService {
             speed: 0
         };
 
+        let interactionArr: Interaction[] = [];
         var monArr = [];
         var types: string[] = [];
         var speed: number = 0;
@@ -46,13 +52,14 @@ export class AppService {
         var speeds: number[] = [];
 
         for(let member of team['members']) {
-            const nameInDB = member.name.replaceAll(/\W/g, ''); // remove dashes and apostrophes
+            const nameInDB = member.name.replaceAll(/\W/g, '').toLowerCase(); // remove dashes and apostrophes
             const mon = await this.manager.findOne(Mon, {name: nameInDB});
 
             speedFlag = 0;
 
             if(!mon) {
-                let response = await firstValueFrom(this.httpService.get(`https://pokeapi.co/api/v2/pokemon/${member.name}`)); // name with punctuation needed here
+                let response = await firstValueFrom(this.httpService.get(`https://pokeapi.co/api/v2/pokemon/${member.name.toLowerCase()}`)); // name with punctuation needed here
+                console.log(response);
                 // TODO IMPORTANT validate response
                 // TODO learn functional programming
                 types = response.data.types.map(({type: {name}}) => ({name})).map((obj) => obj.name);
@@ -85,15 +92,69 @@ export class AppService {
             });
 
             for(let i of member["evs"]) {
-                evObj[i.ev.stat] += i.ev.value;
-                if(i.ev.stat === "spe") speedFlag = i.ev.value;
+                evObj[i.ev.stat.toLowerCase()] += i.ev.value;
+                if(i.ev.stat.toLowerCase() === "spe") speedFlag = i.ev.value;
             }
-            if(this.offNatures.includes(member["nature"])) natureObj.offense += 1;
-            else if(this.defNatures.includes(member["nature"])) natureObj.defense += 1;
-            else if(this.speNatures.includes(member["nature"])) natureObj.speed += 1;
+            if(this.offNatures.includes(member["nature"].toLowerCase())) natureObj.offense += 1;
+            else if(this.defNatures.includes(member["nature"].toLowerCase())) natureObj.defense += 1;
+            else if(this.speNatures.includes(member["nature"].toLowerCase())) natureObj.speed += 1;
             // there must be a more clever way of doing this
 
-            speeds.push(this.calculateSpeed(speed, member["nature"], speedFlag));
+            let typeInteractions = {
+                'bug': 1,
+                'dark': 1,
+                'dragon': 1,
+                'electric': 1,
+                'fairy': 1,
+                'fighting': 1,
+                'fire': 1,
+                'flying': 1,
+                'ghost': 1,
+                'grass': 1,
+                'ground': 1,
+                'ice': 1,
+                'normal': 1,
+                'poison': 1,
+                'psychic': 1,
+                'rock': 1,
+                'steel': 1,
+                'water': 1
+            };
+
+            for await(const i of ['weak_two', 'weak_four', 'immune', 'resist_two', 'resist_four'])
+            {
+                let temp = await this.getIndividualInteraction(types, i);
+                let multiplier: number = 1;
+                for(const t of temp) {
+                    switch (i) {
+                        case 'weak_two':
+                            multiplier = 2;
+                            break;
+                        case 'weak_four':
+                            multiplier = 4;
+                            break;
+                        case 'immune':
+                            multiplier = 0;
+                            break;
+                        case 'resist_two':
+                            multiplier = 0.5;
+                            break;
+                        case 'resist_four':
+                            multiplier = 0.25;
+                            break;
+                        default:
+                            break;
+                    }
+                    typeInteractions[t] = multiplier;
+                }
+            }
+
+            interactionArr.push({
+                name: member.name,
+                interactions: typeInteractions
+            });
+
+            speeds.push(this.calculateSpeed(speed, member["nature"].toLowerCase(), speedFlag));
         }
 
         // const sumObjectValues = obj => Object.values(obj).reduce((x, y) => x + y);
@@ -112,12 +173,13 @@ export class AppService {
             unresisted_pairs: await this.getImportantPairs(monTypes),
             weak_pairs: await this.getImportantPairs(monTypes, "weak"),
             highest_speed: Math.max(...speeds),
-            lowest_speed: Math.min(...speeds)
+            lowest_speed: Math.min(...speeds),
+            individual_interactions: interactionArr
         };
     }
 
     // TODO proper return type, perhaps with an interface
-    getIndividualWeakness(type: string[]): string[] {
+    async getIndividualInteraction(types: string[], interaction: string): Promise<string[]> {
         // http://tau-prolog.org/manual/promises-interface
         const pl = require("tau-prolog");
         const fs = require('fs');
@@ -125,20 +187,19 @@ export class AppService {
 
         let res = [];
 
-        (async() => {
+        const program = fs.readFileSync('./predicatesxy.pl', 'utf8');
+        let index = types.length - 1; // makeshift way to construct the prolog query when there is only one type
+        const goal = `${interaction}(${types[0]}, ${types[index]}, Z).`;
+        const session = pl.create();
+        await session.promiseConsult(program);
+        await session.promiseQuery(goal);
 
-            const program = fs.readFileSync('./predicatesxy.pl', 'utf8');
-            let index = type.length - 1; // makeshift way to construct the prolog query when there is only one type
-            const goal = `weak_two(${type[0]},${type[index]}, Z).`;
-            const session = pl.create();
-            await session.promiseConsult(program);
-            await session.promiseQuery(goal);
+        for await (let answer of session.promiseAnswers())
+        {
+            res.push(session.format_answer(answer));
+        }
 
-            for await (let answer of session.promiseAnswers()) res.push(session.format_answer(answer));
-            console.log(res);
-        })();
-
-        return res;
+        return res.map(this.parsePrologAnswers).map(x => x[0]);
     }
 
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split
@@ -146,7 +207,7 @@ export class AppService {
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replaceAll
     // in the above example, the i flag ignores case. The g (global) flag is apparently necessary for replaceAll
     parsePrologAnswers(x) {
-        return x.split(',').map( (s) => s.replaceAll(/\,|\=|\ |X|Y|\;/g, '') );
+        return x.split(',').map( (s) => s.replaceAll(/\,|\.|\=|\ |X|Y|Z|\;/g, '') );
     }
 
     // TODO IMPORTANT https://stackoverflow.com/a/7400933
