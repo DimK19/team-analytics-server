@@ -11,9 +11,64 @@ import { firstValueFrom } from 'rxjs';
  * but it should be checked here)
  */
 
+export interface MonObj {
+    mon: {
+        name: string,
+        types: string[],
+        speed: number
+    }
+}
+
+export interface NatObj {
+    offensive: number,
+    defensive: number,
+    speed: number
+}
+
+export interface EvObj {
+    hp: number,
+    atk: number,
+    def: number,
+    spa: number,
+    spd: number,
+    spe: number
+}
+
+export interface Types {
+    bug: number,
+    dark: number,
+    dragon: number,
+    electric: number,
+    fairy: number,
+    fighting: number,
+    fire: number,
+    flying: number,
+    ghost: number,
+    grass: number,
+    ground: number,
+    ice: number,
+    normal: number,
+    poison: number,
+    psychic: number,
+    rock: number,
+    steel: number,
+    water: number
+}
+
+export interface Response {
+    mons: MonObj[],
+    natures: NatObj,
+    evs: EvObj,
+    unresisted_pairs: string[][],
+    weak_pairs: string[][],
+    highest_speed: number,
+    lowest_speed: number,
+    individual_interactions: Interaction[]
+}
+
 export interface Interaction {
     name: string,
-    interactions: Object
+    interactions: Types
 }
 
 @Injectable()
@@ -26,10 +81,10 @@ export class AppService {
     private minusSpeNatures: string[] = ["brave", "relaxed", "quiet", "sassy"];
 
     // http://tau-prolog.org/manual/compatibility-with-nodejs
-    async getStats(team): Promise<any> { // TODO void for now, will return object
+    async getStats(team): Promise<Response> { // TODO void for now, will return object
         // extrapolate ev statistics
 
-        let evObj = {
+        let evObj: EvObj = {
             "hp": 0,
             "atk": 0,
             "def": 0,
@@ -38,21 +93,24 @@ export class AppService {
             "spe": 0
         };
 
-        let natureObj = {
-            offense: 0,
-            defense: 0,
+        let natureObj: NatObj = {
+            offensive: 0,
+            defensive: 0,
             speed: 0
         };
 
         let interactionArr: Interaction[] = [];
-        var monArr = [];
+        var monArr: MonObj[] = [];
         var types: string[] = [];
         var speed: number = 0;
         var speedFlag: number = 0;
         var speeds: number[] = [];
 
         for(let member of team['members']) {
-            const nameInDB = member.name.replaceAll(/\W/g, '').toLowerCase(); // remove dashes and apostrophes
+            const nameInDB = member.name.toLowerCase();
+            // Initially I was using replaceAll(/\W/g, '') to remove dashes
+            // and apostrophes, but decided to keep them
+            // (had to reset the db)
             const mon = await this.manager.findOne(Mon, {name: nameInDB});
 
             speedFlag = 0;
@@ -95,8 +153,8 @@ export class AppService {
                 evObj[i.ev.stat.toLowerCase()] += i.ev.value;
                 if(i.ev.stat.toLowerCase() === "spe") speedFlag = i.ev.value;
             }
-            if(this.offNatures.includes(member["nature"].toLowerCase())) natureObj.offense += 1;
-            else if(this.defNatures.includes(member["nature"].toLowerCase())) natureObj.defense += 1;
+            if(this.offNatures.includes(member["nature"].toLowerCase())) natureObj.offensive += 1;
+            else if(this.defNatures.includes(member["nature"].toLowerCase())) natureObj.defensive += 1;
             else if(this.speNatures.includes(member["nature"].toLowerCase())) natureObj.speed += 1;
             // there must be a more clever way of doing this
 
@@ -128,22 +186,22 @@ export class AppService {
                 for(const t of temp) {
                     switch (i) {
                         case 'weak_two':
-                            multiplier = 2;
-                            break;
+                        multiplier = 2;
+                        break;
                         case 'weak_four':
-                            multiplier = 4;
-                            break;
+                        multiplier = 4;
+                        break;
                         case 'immune':
-                            multiplier = 0;
-                            break;
+                        multiplier = 0;
+                        break;
                         case 'resist_two':
-                            multiplier = 0.5;
-                            break;
+                        multiplier = 0.5;
+                        break;
                         case 'resist_four':
-                            multiplier = 0.25;
-                            break;
+                        multiplier = 0.25;
+                        break;
                         default:
-                            break;
+                        break;
                     }
                     typeInteractions[t] = multiplier;
                 }
