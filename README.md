@@ -39,39 +39,67 @@ The server listens on port 3000, or on `PORT` if set.
 
 Production: `npm run build` then `npm run start:prod`.
 
-## Using PostgreSQL instead of SQLite
+## Switching from SQLite to PostgreSQL
 
-This is what the Heroku deployment used.
+By default the server stores the Pokémon cache in SQLite. The Heroku deployment used PostgreSQL instead, because Heroku’s filesystem is not persistent. These are the changes involved.
 
-1. Install the driver:
+### 1. Swap the database driver
 
-   ```
-   npm install pg
-   ```
+```
+npm uninstall sqlite3
+npm install pg
+```
 
-2. Replace the contents of `ormconfig.json` with the following, filling in your own connection details:
+This replaces `"sqlite3": "^5.0.8"` with `"pg": "^8.8.0"` in `package.json`. TypeORM picks the driver from the `type` field in `ormconfig.json`.
 
-   ```json
-   {
-       "type": "postgres",
-       "host": "<host>",
-       "port": 5432,
-       "username": "<username>",
-       "password": "<password>",
-       "database": "<database>",
-       "entities": ["dist/**/*.entity{.ts,.js}"],
-       "ssl": true,
-       "extra": {
-           "ssl": {
-               "rejectUnauthorized": false
-           }
-       },
-       "synchronize": true,
-       "logging": true
-   }
-   ```
+### 2. Point TypeORM at PostgreSQL
 
-   - `ssl` and `rejectUnauthorized: false` are required by Heroku Postgres. Remove both for a local database without SSL.
-   - `synchronize: true` creates the `mon` table automatically on startup.
+Replace the contents of `ormconfig.json` with the following, filling in your own connection details:
 
-3. Do not commit `ormconfig.json` with real credentials. Add it to `.gitignore`.
+```json
+{
+    "type": "postgres",
+    "host": "<host>",
+    "port": 5432,
+    "username": "<username>",
+    "password": "<password>",
+    "database": "<database>",
+    "entities": ["dist/**/*.entity{.ts,.js}"],
+    "ssl": true,
+    "extra": {
+        "ssl": {
+            "rejectUnauthorized": false
+        }
+    },
+    "synchronize": true,
+    "logging": true
+}
+```
+
+- `ssl` and `rejectUnauthorized: false` are required by Heroku Postgres. Remove both for a local database without SSL.
+- `synchronize: true` creates the `mon` table automatically on startup.
+- Do not commit `ormconfig.json` with real credentials. Add it to `.gitignore`.
+
+### 3. Read the port from the environment
+
+Heroku assigns the port through the `PORT` variable. In `src/main.ts`, change:
+
+```ts
+await app.listen(3000);
+```
+
+to:
+
+```ts
+await app.listen(process.env.PORT || 3000);
+```
+
+### 4. Add a Procfile
+
+For Heroku, create a `Procfile` in the repository root containing:
+
+```
+web: npm run start:prod
+```
+
+Build the project (`npm run build`) before starting in production mode.
