@@ -1,73 +1,77 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Team Analytics Server
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend of a web application that analyses a Pokemon team. It receives a team as JSON, works out type matchups using Prolog, and returns the analysis.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Client: https://github.com/DimK19/team-analytics-client
 
-## Description
+## Endpoints
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+`POST /team` accepts a team of six Pokemon (name, nature, EVs, IVs) and returns:
 
-## Installation
+- For each member, the damage multiplier taken from each of the 18 types (0, 0.25, 0.5, 2, 4).
+- Unresisted type pairs: pairs of attacking types for which no team member resists both.
+- Weak type pairs: pairs of attacking types for which every team member is weak to at least one.
+- The team’s EV distribution and a count of offensive, defensive and speed natures.
+- The highest and lowest speed on the team.
 
-```bash
-$ npm install
+Type and base speed data is read from a database table. Pokémon not yet in the table are fetched from [PokeAPI](https://pokeapi.co/) and stored.
+
+The type chart and the matchup rules are written in Prolog (`predicatesxy.pl`) and queried from Node.js with Tau Prolog.
+
+Other endpoints: `GET /mon`, `GET /mon/:id`, `POST /mon/create`.
+
+## Technologies
+
+- [NestJS](https://nestjs.com/) (TypeScript)
+- [Tau Prolog](http://tau-prolog.org/)
+- TypeORM with SQLite (PostgreSQL also supported for web deployment, see below)
+- PokeAPI, via `@nestjs/axios`
+- Previously deployed on Heroku (`Procfile`)
+
+## Running
+
+```
+npm install
+npm run start:dev
 ```
 
-## Running the app
+The server listens on port 3000, or on `PORT` if set.
 
-```bash
-# development
-$ npm run start
+Production: `npm run build` then `npm run start:prod`.
 
-# watch mode
-$ npm run start:dev
+## Using PostgreSQL instead of SQLite
 
-# production mode
-$ npm run start:prod
-```
+This is what the Heroku deployment used.
 
-## Test
+1. Install the driver:
 
-```bash
-# unit tests
-$ npm run test
+   ```
+   npm install pg
+   ```
 
-# e2e tests
-$ npm run test:e2e
+2. Replace the contents of `ormconfig.json` with the following, filling in your own connection details:
 
-# test coverage
-$ npm run test:cov
-```
+   ```json
+   {
+       "type": "postgres",
+       "host": "<host>",
+       "port": 5432,
+       "username": "<username>",
+       "password": "<password>",
+       "database": "<database>",
+       "entities": ["dist/**/*.entity{.ts,.js}"],
+       "ssl": true,
+       "extra": {
+           "ssl": {
+               "rejectUnauthorized": false
+           }
+       },
+       "synchronize": true,
+       "logging": true
+   }
+   ```
 
-## Support
+   - `ssl` and `rejectUnauthorized: false` are required by Heroku Postgres. Remove both for a local database without SSL.
+   - `synchronize: true` creates the `mon` table automatically on startup.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+3. Do not commit `ormconfig.json` with real credentials. Add it to `.gitignore`.
